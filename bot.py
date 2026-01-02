@@ -106,15 +106,26 @@ class KalshiAPI:
             raise ValueError("No private key configured")
     
     def _sign(self, method: str, path: str, timestamp: str) -> str:
-        message = f"{timestamp}{method}{path}".encode()
+        # Sign path WITHOUT query params per Kalshi docs
+        path_without_query = path.split('?')[0]
+        message = f"{timestamp}{method}{path_without_query}".encode()
+        
         if isinstance(self.private_key, ed25519.Ed25519PrivateKey):
             sig = self.private_key.sign(message)
         else:
-            sig = self.private_key.sign(message, padding.PKCS1v15(), hashes.SHA256())
+            # Kalshi requires PSS padding, not PKCS1v15
+            sig = self.private_key.sign(
+                message,
+                padding.PSS(
+                    mgf=padding.MGF1(hashes.SHA256()),
+                    salt_length=padding.PSS.MAX_LENGTH
+                ),
+                hashes.SHA256()
+            )
         return base64.b64encode(sig).decode()
     
     def _request(self, method: str, path: str, params: dict = None, json_body: dict = None) -> dict:
-        # Build full path with query string for signing
+        # Build full path with query string for URL
         if params:
             query = "&".join(f"{k}={v}" for k, v in sorted(params.items()))
             full_path = f"{path}?{query}"
@@ -129,7 +140,6 @@ class KalshiAPI:
             "Content-Type": "application/json",
         }
         
-        # Use full URL with query string baked in (not params=)
         url = f"{self.BASE_URL}{full_path}"
         
         for attempt in range(3):
