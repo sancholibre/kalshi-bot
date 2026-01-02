@@ -88,7 +88,7 @@ def discord_trade(action: str, ticker: str, side: str, price: int, qty: int, pro
 # =============================================================================
 
 class KalshiAPI:
-    BASE_URL = "https://trading-api.kalshi.com/trade-api/v2"
+    BASE_URL = "https://api.elections.kalshi.com"
     
     def __init__(self):
         self.private_key = self._load_key()
@@ -126,16 +126,13 @@ class KalshiAPI:
         return base64.b64encode(sig).decode()
     
     def _request(self, method: str, path: str, params: dict = None, json_body: dict = None) -> dict:
-        # path comes in as relative (e.g., "/exchange/status")
-        # We need to sign the FULL path including the /trade-api/v2 prefix
-        api_path = f"/trade-api/v2{path}"
-        
-        # Build path with query string
+        # path should include /trade-api/v2 prefix (e.g., "/trade-api/v2/exchange/status")
+        # Build path with query string for signing
         if params:
             query = "&".join(f"{k}={v}" for k, v in sorted(params.items()))
-            full_path = f"{api_path}?{query}"
+            full_path = f"{path}?{query}"
         else:
-            full_path = api_path
+            full_path = path
         
         timestamp = str(int(time.time() * 1000))
         headers = {
@@ -145,16 +142,12 @@ class KalshiAPI:
             "Content-Type": "application/json",
         }
         
-        # URL uses base URL (which already has /trade-api/v2) + relative path
         url = f"{self.BASE_URL}{path}"
-        if params:
-            query = "&".join(f"{k}={v}" for k, v in sorted(params.items()))
-            url = f"{url}?{query}"
         
         for attempt in range(3):
             try:
                 if method == "GET":
-                    resp = self.session.get(url, headers=headers, timeout=15)
+                    resp = self.session.get(url, headers=headers, params=params, timeout=15)
                 else:
                     resp = self.session.post(url, headers=headers, json=json_body, timeout=15)
                 
@@ -177,10 +170,10 @@ class KalshiAPI:
         params = {"limit": limit, "status": "open", "max_close_ts": max_close_ts}
         if cursor:
             params["cursor"] = cursor
-        return self._request("GET", "/markets", params)
+        return self._request("GET", "/trade-api/v2/markets", params)
     
     def get_orderbook(self, ticker: str):
-        return self._request("GET", f"/markets/{ticker}/orderbook")
+        return self._request("GET", f"/trade-api/v2/markets/{ticker}/orderbook")
     
     def create_order(self, ticker: str, side: str, count: int, price: int):
         """Create a limit order. Side is 'yes' or 'no'."""
@@ -196,7 +189,7 @@ class KalshiAPI:
         else:
             body["no_price"] = price
         
-        return self._request("POST", "/portfolio/orders", json_body=body)
+        return self._request("POST", "/trade-api/v2/portfolio/orders", json_body=body)
 
 # =============================================================================
 # SCANNER
@@ -359,7 +352,7 @@ def main():
     
     # Test connection
     try:
-        status = api._request("GET", "/exchange/status")
+        status = api._request("GET", "/trade-api/v2/exchange/status")
         exchange_open = status.get("trading_active", False)
         print(f"\nExchange: {'OPEN' if exchange_open else 'CLOSED'}")
     except Exception as e:
