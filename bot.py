@@ -113,11 +113,13 @@ class KalshiAPI:
             sig = self.private_key.sign(message, padding.PKCS1v15(), hashes.SHA256())
         return base64.b64encode(sig).decode()
     
-    def _request(self, method: str, path: str, params: dict = None, json_body: dict = None) -> dict:
-        full_path = path
+   def _request(self, method: str, path: str, params: dict = None, json_body: dict = None) -> dict:
+    # Build full path with query string for signing
         if params:
             query = "&".join(f"{k}={v}" for k, v in sorted(params.items()))
             full_path = f"{path}?{query}"
+        else:
+            full_path = path
         
         timestamp = str(int(time.time() * 1000))
         headers = {
@@ -127,14 +129,15 @@ class KalshiAPI:
             "Content-Type": "application/json",
         }
         
-        url = f"{self.BASE_URL}{path}"
+        # Use full URL with query string baked in (not params=)
+        url = f"{self.BASE_URL}{full_path}"
         
         for attempt in range(3):
             try:
                 if method == "GET":
-                    resp = self.session.get(url, headers=headers, params=params, timeout=15)
+                    resp = self.session.get(url, headers=headers, timeout=15)
                 else:
-                    resp = self.session.post(url, headers=headers, params=params, json=json_body, timeout=15)
+                    resp = self.session.post(url, headers=headers, json=json_body, timeout=15)
                 
                 if resp.status_code == 429:
                     print("[RATE LIMITED] Waiting 10s...")
