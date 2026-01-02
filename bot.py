@@ -113,8 +113,8 @@ class KalshiAPI:
             sig = self.private_key.sign(message, padding.PKCS1v15(), hashes.SHA256())
         return base64.b64encode(sig).decode()
     
-   def _request(self, method: str, path: str, params: dict = None, json_body: dict = None) -> dict:
-    # Build full path with query string for signing
+    def _request(self, method: str, path: str, params: dict = None, json_body: dict = None) -> dict:
+        # Build full path with query string for signing
         if params:
             query = "&".join(f"{k}={v}" for k, v in sorted(params.items()))
             full_path = f"{path}?{query}"
