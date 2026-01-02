@@ -106,31 +106,36 @@ class KalshiAPI:
             raise ValueError("No private key configured")
     
     def _sign(self, method: str, path: str, timestamp: str) -> str:
-        # Sign path WITHOUT query params per Kalshi docs
+        # Sign the FULL path (including /trade-api/v2 prefix) WITHOUT query params
+        # Per Kalshi docs: sign "/trade-api/v2/portfolio/orders" not just "/portfolio/orders"
         path_without_query = path.split('?')[0]
         message = f"{timestamp}{method}{path_without_query}".encode()
         
         if isinstance(self.private_key, ed25519.Ed25519PrivateKey):
             sig = self.private_key.sign(message)
         else:
-            # Kalshi requires PSS padding, not PKCS1v15
+            # Kalshi requires PSS padding with DIGEST_LENGTH salt
             sig = self.private_key.sign(
                 message,
                 padding.PSS(
                     mgf=padding.MGF1(hashes.SHA256()),
-                    salt_length=padding.PSS.MAX_LENGTH
+                    salt_length=padding.PSS.DIGEST_LENGTH
                 ),
                 hashes.SHA256()
             )
         return base64.b64encode(sig).decode()
     
     def _request(self, method: str, path: str, params: dict = None, json_body: dict = None) -> dict:
-        # Build full path with query string for URL
+        # path comes in as relative (e.g., "/exchange/status")
+        # We need to sign the FULL path including the /trade-api/v2 prefix
+        api_path = f"/trade-api/v2{path}"
+        
+        # Build path with query string
         if params:
             query = "&".join(f"{k}={v}" for k, v in sorted(params.items()))
-            full_path = f"{path}?{query}"
+            full_path = f"{api_path}?{query}"
         else:
-            full_path = path
+            full_path = api_path
         
         timestamp = str(int(time.time() * 1000))
         headers = {
@@ -140,7 +145,11 @@ class KalshiAPI:
             "Content-Type": "application/json",
         }
         
-        url = f"{self.BASE_URL}{full_path}"
+        # URL uses base URL (which already has /trade-api/v2) + relative path
+        url = f"{self.BASE_URL}{path}"
+        if params:
+            query = "&".join(f"{k}={v}" for k, v in sorted(params.items()))
+            url = f"{url}?{query}"
         
         for attempt in range(3):
             try:
